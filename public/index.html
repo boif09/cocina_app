@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f4ed">
+  <title>Cocina en casa</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#recetas" aria-label="Cocina en casa">
+        <span class="brand-mark">C</span>
+        <span>
+          <strong>Cocina en casa</strong>
+          <small>Recetas, menú y compra</small>
+        </span>
+      </a>
+
+      <nav class="main-nav" aria-label="Secciones principales">
+        <button class="nav-button active" data-view="recipes">
+          <span>📖</span> Recetas
+        </button>
+        <button class="nav-button" data-view="menu">
+          <span>📅</span> Menú semanal
+        </button>
+        <button class="nav-button" data-view="shopping">
+          <span>🛒</span> Lista de la compra
+        </button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="view-recipes" class="view active">
+        <div class="hero-row">
+          <div>
+            <p class="eyebrow">Vuestro recetario</p>
+            <h1>¿Qué cocinamos hoy?</h1>
+            <p class="subtitle">Guarda ingredientes, cantidades y todos los pasos de cada receta.</p>
+          </div>
+          <button id="new-recipe-button" class="primary-button">＋ Nueva receta</button>
+        </div>
+
+        <div class="search-panel">
+          <span class="search-icon">⌕</span>
+          <input id="recipe-search" type="search" placeholder="Buscar por receta o ingrediente…" autocomplete="off">
+        </div>
+
+        <div id="recipe-grid" class="recipe-grid"></div>
+        <div id="recipe-empty" class="empty-state hidden">
+          <div class="empty-icon">🥘</div>
+          <h2>Todavía no hay recetas</h2>
+          <p>Crea la primera receta y aparecerá también como plato disponible en el menú semanal.</p>
+          <button class="primary-button" data-action="new-recipe">Crear primera receta</button>
+        </div>
+      </section>
+
+      <section id="view-menu" class="view">
+        <div class="hero-row compact">
+          <div>
+            <p class="eyebrow">Planificación</p>
+            <h1>Menú semanal</h1>
+            <p class="subtitle">Comida y cena de lunes a domingo. Deja vacío cuando no comáis en casa.</p>
+          </div>
+          <button id="save-menu-button" class="primary-button">Guardar menú</button>
+        </div>
+
+        <div class="week-toolbar">
+          <button id="previous-week" class="icon-button" aria-label="Semana anterior">←</button>
+          <div class="week-title-wrap">
+            <strong id="week-title"></strong>
+            <button id="current-week" class="text-button">Ir a esta semana</button>
+          </div>
+          <button id="next-week" class="icon-button" aria-label="Semana siguiente">→</button>
+        </div>
+
+        <datalist id="dish-suggestions"></datalist>
+        <div id="weekly-menu" class="weekly-menu"></div>
+        <p class="menu-help">Los platos nuevos se guardan automáticamente al guardar el menú y aparecerán como sugerencia la próxima vez.</p>
+      </section>
+
+      <section id="view-shopping" class="view">
+        <div class="hero-row compact">
+          <div>
+            <p class="eyebrow">Para el supermercado</p>
+            <h1 id="shopping-title">Lista de la compra</h1>
+            <p class="subtitle">Toca un ingrediente para marcarlo como comprado.</p>
+          </div>
+          <button id="new-shopping-list" class="secondary-button">Nueva lista</button>
+        </div>
+
+        <div class="shopping-add-panel">
+          <div class="shopping-search-wrap">
+            <label for="shopping-ingredient">Añadir ingrediente</label>
+            <div class="shopping-input-row">
+              <input id="shopping-ingredient" list="ingredient-suggestions" placeholder="Ej. tomates, arroz, leche…" autocomplete="off">
+              <input id="shopping-quantity" type="number" min="0" step="any" placeholder="Cant.">
+              <input id="shopping-unit" placeholder="Unidad">
+              <button id="add-shopping-item" class="primary-button">Añadir</button>
+            </div>
+          </div>
+          <datalist id="ingredient-suggestions"></datalist>
+        </div>
+
+        <div class="shopping-summary">
+          <span id="shopping-counter">0 pendientes</span>
+          <button id="clear-purchased" class="text-button danger-text">Quitar comprados</button>
+        </div>
+
+        <div id="shopping-tags" class="shopping-tags"></div>
+        <div id="shopping-empty" class="empty-state compact hidden">
+          <div class="empty-icon">🧺</div>
+          <h2>La lista está vacía</h2>
+          <p>Busca un ingrediente arriba para añadirlo.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="recipe-form-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <section class="modal-card modal-large" role="dialog" aria-modal="true" aria-labelledby="recipe-form-title">
+      <header class="modal-header">
+        <div>
+          <p class="eyebrow">Recetario</p>
+          <h2 id="recipe-form-title">Nueva receta</h2>
+        </div>
+        <button class="close-button" data-close-modal aria-label="Cerrar">×</button>
+      </header>
+
+      <form id="recipe-form">
+        <input id="recipe-id" type="hidden">
+        <div class="form-grid recipe-main-fields">
+          <label class="field span-2">
+            <span>Nombre de la receta *</span>
+            <input id="recipe-title" required placeholder="Ej. Ensaladilla rusa">
+          </label>
+          <label class="field span-2">
+            <span>Descripción</span>
+            <textarea id="recipe-description" rows="2" placeholder="Una breve descripción opcional"></textarea>
+          </label>
+          <label class="field">
+            <span>Raciones</span>
+            <input id="recipe-servings" type="number" min="1" step="1" placeholder="2">
+          </label>
+          <label class="field">
+            <span>Preparación</span>
+            <div class="input-suffix"><input id="recipe-prep" type="number" min="0" step="1"><span>min</span></div>
+          </label>
+          <label class="field">
+            <span>Cocción</span>
+            <div class="input-suffix"><input id="recipe-cook" type="number" min="0" step="1"><span>min</span></div>
+          </label>
+        </div>
+
+        <div class="form-section">
+          <div class="section-heading">
+            <div>
+              <h3>Ingredientes</h3>
+              <p>Los ingredientes nuevos se añadirán automáticamente al catálogo.</p>
+            </div>
+            <button id="add-ingredient-row" type="button" class="secondary-button small">＋ Ingrediente</button>
+          </div>
+          <div id="recipe-ingredients" class="dynamic-list"></div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-heading">
+            <div>
+              <h3>Pasos</h3>
+              <p>Ordénalos tal como hay que preparar la receta.</p>
+            </div>
+            <button id="add-step-row" type="button" class="secondary-button small">＋ Paso</button>
+          </div>
+          <div id="recipe-steps" class="dynamic-list"></div>
+        </div>
+
+        <footer class="modal-actions">
+          <button type="button" class="secondary-button" data-close-modal>Cancelar</button>
+          <button type="submit" class="primary-button">Guardar receta</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+
+  <div id="recipe-detail-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <section class="modal-card modal-detail" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <header class="modal-header detail-header">
+        <div>
+          <p class="eyebrow">Receta</p>
+          <h2 id="detail-title"></h2>
+          <p id="detail-description" class="subtitle"></p>
+        </div>
+        <button class="close-button" data-close-modal aria-label="Cerrar">×</button>
+      </header>
+
+      <div id="detail-meta" class="recipe-meta detail-meta"></div>
+
+      <div class="detail-columns">
+        <section>
+          <h3>Ingredientes</h3>
+          <ul id="detail-ingredients" class="ingredient-detail-list"></ul>
+        </section>
+        <section>
+          <h3>Preparación</h3>
+          <ol id="detail-steps" class="steps-detail-list"></ol>
+        </section>
+      </div>
+
+      <footer class="modal-actions detail-actions">
+        <button id="delete-recipe" class="secondary-button danger-button">Eliminar</button>
+        <div class="action-group">
+          <button id="recipe-to-shopping" class="secondary-button">🛒 Añadir a la compra</button>
+          <button id="edit-recipe" class="primary-button">Editar receta</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

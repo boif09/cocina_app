@@ -1,0 +1,11 @@
+{
+  "app": {
+    "port": 3002,
+    "basePath": "/cocina"
+  },
+  "database": {
+    "provider": "sqlite",
+    "path": "./data/cocina.db",
+    "url": ""
+  }
+}
