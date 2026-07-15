@@ -184,8 +184,9 @@ function resetRecipeForm(prefillTitle = '') {
 async function openRecipeForm(recipe = null, prefillTitle = '') {
   resetRecipeForm(prefillTitle);
   if (recipe) {
-    $('#recipe-form-title').textContent = 'Editar receta';
-    $('#recipe-id').value = recipe.id;
+    const isExistingRecipe = Boolean(recipe.id);
+    $('#recipe-form-title').textContent = isExistingRecipe ? 'Editar receta' : 'Nueva receta';
+    $('#recipe-id').value = isExistingRecipe ? recipe.id : '';
     $('#recipe-title').value = recipe.title || '';
     $('#recipe-description').value = recipe.description || '';
     $('#recipe-servings').value = recipe.servings || '';
@@ -201,6 +202,31 @@ async function openRecipeForm(recipe = null, prefillTitle = '') {
   closeModal('recipe-detail-modal');
   openModal('recipe-form-modal');
   setTimeout(() => $('#recipe-title').focus(), 50);
+}
+
+async function importRecipeFromUrl(event) {
+  event.preventDefault();
+  const input = $('#recipe-import-url');
+  const button = $('#recipe-import-button');
+  const url = input.value.trim();
+  if (!url) return showToast('Pega un enlace de receta.', 'error');
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Importando...';
+
+  try {
+    const recipe = await apiFetch('/recipes/import-url', {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    });
+    await openRecipeForm(recipe);
+    input.value = '';
+    showToast('Receta importada. Revisa los datos antes de guardar.');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 function collectRecipeForm() {
@@ -540,6 +566,7 @@ $$('.nav-button').forEach(button => {
 
 $('#new-recipe-button').addEventListener('click', () => openRecipeForm());
 $$('[data-action="new-recipe"]').forEach(button => button.addEventListener('click', () => openRecipeForm()));
+$('#recipe-import-form').addEventListener('submit', event => importRecipeFromUrl(event).catch(handleError));
 $('#add-ingredient-row').addEventListener('click', () => addIngredientRow());
 $('#add-step-row').addEventListener('click', () => addStepRow());
 $('#recipe-form').addEventListener('submit', event => saveRecipe(event).catch(handleError));

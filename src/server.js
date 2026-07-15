@@ -10,6 +10,7 @@ const {
   findOrCreateIngredient,
   findOrCreateDish
 } = require('./db');
+const { importRecipeFromUrl } = require('./recipe-importer');
 
 const app = express();
 const api = `${basePath}/api`;
@@ -165,6 +166,15 @@ app.get(`${api}/recipes`, (req, res) => {
     ORDER BY r.updated_at DESC, r.title
   `).all(...params);
   res.json(recipes);
+});
+
+app.post(`${api}/recipes/import-url`, async (req, res, next) => {
+  try {
+    const recipe = await importRecipeFromUrl(req.body.url);
+    res.json(recipe);
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get(`${api}/recipes/:id`, (req, res) => {
