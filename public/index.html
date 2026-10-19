@@ -90,7 +90,7 @@
           <div>
             <p class="eyebrow">Para el supermercado</p>
             <h1 id="shopping-title">Lista de la compra</h1>
-            <p class="subtitle">Toca un ingrediente para marcarlo como comprado.</p>
+            <p class="subtitle">Toca un ingrediente para marcarlo como comprado. Mantén pulsado (o usa ✎) para cambiar la cantidad.</p>
           </div>
           <button id="new-shopping-list" class="secondary-button">Nueva lista</button>
         </div>
@@ -221,6 +221,41 @@
           <button id="edit-recipe" class="primary-button">Editar receta</button>
         </div>
       </footer>
+    </section>
+  </div>
+
+  <div id="shopping-edit-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <section class="modal-card modal-small" role="dialog" aria-modal="true" aria-labelledby="shopping-edit-name">
+      <header class="modal-header">
+        <div>
+          <p class="eyebrow">Editar ingrediente</p>
+          <h2 id="shopping-edit-name"></h2>
+        </div>
+        <button class="close-button" type="button" data-close-modal aria-label="Cerrar">×</button>
+      </header>
+
+      <form id="shopping-edit-form">
+        <input id="shopping-edit-id" type="hidden">
+        <div class="quantity-editor">
+          <button id="shopping-edit-minus" type="button" class="stepper-button" aria-label="Quitar uno">−</button>
+          <input id="shopping-edit-quantity" type="number" inputmode="decimal" min="0" step="any" placeholder="Cant." aria-label="Cantidad">
+          <button id="shopping-edit-plus" type="button" class="stepper-button" aria-label="Añadir uno">＋</button>
+        </div>
+        <label class="field">
+          <span>Unidad (opcional)</span>
+          <input id="shopping-edit-unit" list="unit-suggestions" placeholder="kg, l, uds…" autocomplete="off">
+        </label>
+        <datalist id="unit-suggestions">
+          <option value="uds"></option><option value="kg"></option><option value="g"></option>
+          <option value="l"></option><option value="ml"></option><option value="paquete"></option>
+          <option value="lata"></option><option value="botella"></option>
+        </datalist>
+        <footer class="modal-actions">
+          <button type="button" class="secondary-button" data-close-modal>Cancelar</button>
+          <button type="submit" class="primary-button">Guardar</button>
+        </footer>
+      </form>
     </section>
   </div>
 

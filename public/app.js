@@ -482,12 +482,16 @@ function renderShoppingList() {
       <span class="tag-check">✓</span>
       <strong>${escapeHtml(item.ingredient_name)}</strong>
       ${quantity ? `<span class="tag-quantity">${escapeHtml(quantity)}</span>` : ''}
+      <button class="tag-edit" type="button" aria-label="Editar cantidad">✎</button>
       <button class="tag-delete" type="button" aria-label="Eliminar">×</button>
     `;
     tag.addEventListener('click', event => {
-      if (event.target.closest('.tag-delete')) return;
+      if (event.target.closest('.tag-delete, .tag-edit')) return;
+      if (tag.dataset.longPressed) { delete tag.dataset.longPressed; return; }
       toggleShoppingItem(item).catch(handleError);
     });
+    $('.tag-edit', tag).addEventListener('click', () => openShoppingEdit(item));
+    enableLongPress(tag, () => openShoppingEdit(item));
     $('.tag-delete', tag).addEventListener('click', () => deleteShoppingItem(item.id).catch(handleError));
     tags.appendChild(tag);
   }
@@ -516,6 +520,72 @@ async function addShoppingItem() {
   $('#shopping-unit').value = '';
   await Promise.all([loadShoppingList(), loadIngredients()]);
   $('#shopping-ingredient').focus();
+}
+
+// Pulsación larga (táctil/lápiz) o clic derecho (ratón) para editar
+function enableLongPress(element, callback) {
+  let timer;
+  let startX = 0;
+  let startY = 0;
+  const cancel = () => clearTimeout(timer);
+
+  element.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' || event.target.closest('.tag-delete, .tag-edit')) return;
+    startX = event.clientX;
+    startY = event.clientY;
+    cancel();
+    timer = setTimeout(() => {
+      element.dataset.longPressed = '1';
+      if (navigator.vibrate) navigator.vibrate(30);
+      callback();
+    }, 500);
+  });
+  element.addEventListener('pointermove', event => {
+    if (Math.abs(event.clientX - startX) > 10 || Math.abs(event.clientY - startY) > 10) cancel();
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(name => element.addEventListener(name, () => {
+    cancel();
+    // Si el navegador no genera el clic tras la pulsación larga, no dejar la marca colgada
+    if (element.dataset.longPressed) setTimeout(() => delete element.dataset.longPressed, 400);
+  }));
+  element.addEventListener('contextmenu', event => {
+    event.preventDefault();
+    cancel();
+    if (event.pointerType !== 'touch' && !element.dataset.longPressed) callback();
+  });
+}
+
+function openShoppingEdit(item) {
+  $('#shopping-edit-id').value = item.id;
+  $('#shopping-edit-name').textContent = item.ingredient_name;
+  $('#shopping-edit-quantity').value = item.quantity ?? '';
+  $('#shopping-edit-unit').value = item.unit || '';
+  openModal('shopping-edit-modal');
+  setTimeout(() => {
+    const input = $('#shopping-edit-quantity');
+    input.focus();
+    input.select();
+  }, 50);
+}
+
+function stepShoppingQuantity(delta) {
+  const input = $('#shopping-edit-quantity');
+  const next = Math.max(0, (Number(input.value) || 0) + delta);
+  input.value = Math.round(next * 100) / 100;
+}
+
+async function saveShoppingEdit(event) {
+  event.preventDefault();
+  const id = $('#shopping-edit-id').value;
+  await apiFetch(`/shopping/items/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      quantity: $('#shopping-edit-quantity').value || null,
+      unit: $('#shopping-edit-unit').value.trim()
+    })
+  });
+  closeModal('shopping-edit-modal');
+  await loadShoppingList();
 }
 
 async function toggleShoppingItem(item) {
@@ -602,6 +672,9 @@ $('#shopping-ingredient').addEventListener('keydown', event => {
     addShoppingItem().catch(handleError);
   }
 });
+$('#shopping-edit-form').addEventListener('submit', event => saveShoppingEdit(event).catch(handleError));
+$('#shopping-edit-minus').addEventListener('click', () => stepShoppingQuantity(-1));
+$('#shopping-edit-plus').addEventListener('click', () => stepShoppingQuantity(1));
 $('#clear-purchased').addEventListener('click', () => clearPurchased().catch(handleError));
 $('#new-shopping-list').addEventListener('click', () => createShoppingList().catch(handleError));
 

@@ -359,6 +359,14 @@ h3 { margin-bottom: 6px; font-size: 18px; }
 .tag-check { display: grid; place-items: center; width: 22px; height: 22px; color: white; background: var(--green); border-radius: 50%; font-size: 12px; }
 .shopping-tag:not(.purchased) .tag-check { color: transparent; background: transparent; border: 1.5px solid #b8b8ae; }
 .tag-quantity { color: var(--muted); font-size: 12px; }
+.shopping-tag { -webkit-touch-callout: none; touch-action: manipulation; }
+.tag-edit { display: grid; place-items: center; width: 28px; height: 28px; border: 0; color: var(--muted); background: rgba(0,0,0,.04); border-radius: 50%; cursor: pointer; font-size: 14px; }
+.tag-edit:hover { color: var(--accent-dark); background: var(--accent-soft); }
+.modal-small { width: min(400px, 100%); }
+.quantity-editor { display: grid; grid-template-columns: 56px 1fr 56px; gap: 10px; margin-bottom: 16px; }
+.quantity-editor input { width: 100%; min-width: 0; padding: 12px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 12px; font-size: 24px; font-weight: 800; text-align: center; }
+.stepper-button { height: 56px; color: var(--accent-dark); background: var(--accent-soft); border: 0; border-radius: 12px; font-size: 26px; font-weight: 800; cursor: pointer; }
+.stepper-button:active { transform: scale(.96); }
 .tag-delete { display: grid; place-items: center; width: 24px; height: 24px; border: 0; color: var(--muted); background: rgba(0,0,0,.04); border-radius: 50%; cursor: pointer; }
 .tag-delete:hover { color: var(--danger); background: #f9e2e2; }
 
