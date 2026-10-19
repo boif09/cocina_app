@@ -78,6 +78,51 @@ function switchView(viewName) {
   if (viewName === 'shopping') loadShoppingList().catch(handleError);
 }
 
+// Deslizar izquierda/derecha para cambiar de sección (solo móvil)
+const VIEW_ORDER = ['recipes', 'menu', 'shopping'];
+const mobileQuery = window.matchMedia('(max-width: 700px)');
+
+function canScrollHorizontally(element, dx) {
+  for (let node = element; node && node !== document.body; node = node.parentElement) {
+    if (node.scrollWidth <= node.clientWidth + 1) continue;
+    if (!['auto', 'scroll'].includes(getComputedStyle(node).overflowX)) continue;
+    // dx < 0: el dedo va a la izquierda y el contenido se desplaza hacia la derecha
+    if (dx < 0 && node.scrollLeft + node.clientWidth < node.scrollWidth - 1) return true;
+    if (dx > 0 && node.scrollLeft > 1) return true;
+  }
+  return false;
+}
+
+function setupSwipeNavigation() {
+  let start = null;
+
+  document.addEventListener('touchstart', event => {
+    const blocked = event.touches.length !== 1
+      || $('.modal.open')
+      || event.target.closest('input, textarea, select');
+    start = blocked ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY, target: event.target };
+  }, { passive: true });
+
+  document.addEventListener('touchend', event => {
+    if (!start || !mobileQuery.matches) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    const target = start.target;
+    start = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8) return;
+    if (canScrollHorizontally(target, dx)) return;
+
+    const current = VIEW_ORDER.indexOf($('.nav-button.active')?.dataset.view);
+    const next = VIEW_ORDER[current + (dx < 0 ? 1 : -1)];
+    if (current < 0 || !next) return;
+    switchView(next);
+    window.scrollTo(0, 0);
+  }, { passive: true });
+
+  document.addEventListener('touchcancel', () => { start = null; }, { passive: true });
+}
+
 function handleError(error) {
   console.error(error);
   showToast(error.message || 'Ha ocurrido un error.', 'error');
@@ -677,6 +722,8 @@ $('#shopping-edit-minus').addEventListener('click', () => stepShoppingQuantity(-
 $('#shopping-edit-plus').addEventListener('click', () => stepShoppingQuantity(1));
 $('#clear-purchased').addEventListener('click', () => clearPurchased().catch(handleError));
 $('#new-shopping-list').addEventListener('click', () => createShoppingList().catch(handleError));
+
+setupSwipeNavigation();
 
 async function init() {
   const hashView = { '#recetas': 'recipes', '#menu': 'menu', '#compra': 'shopping' }[location.hash] || 'recipes';
