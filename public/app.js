@@ -9,7 +9,9 @@ const state = {
   activeRecipe: null,
   shoppingList: null,
   weekStart: getMonday(new Date()),
-  menu: null
+  menu: null,
+  // Texto escrito en el menú y aún sin guardar, por semana: { '2026-10-19': { '0-lunch': 'Pasta' } }
+  menuDrafts: {}
 };
 
 const days = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
@@ -406,6 +408,12 @@ function renderMenu() {
     (state.menu?.entries || []).map(entry => [`${entry.day_index}-${entry.meal_type}`, entry])
   );
   const todayIso = toIsoDate(new Date());
+  const weekIso = toIsoDate(state.weekStart);
+  const draft = state.menuDrafts[weekIso] || {};
+  const slotEntry = (dayIndex, mealType) => {
+    const key = `${dayIndex}-${mealType}`;
+    return key in draft ? { dish_name: draft[key] } : entryMap.get(key);
+  };
 
   days.forEach((dayName, dayIndex) => {
     const date = addDays(state.weekStart, dayIndex);
@@ -416,15 +424,19 @@ function renderMenu() {
         <strong>${dayName}</strong>
         <span>${new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(date)}</span>
       </div>
-      ${menuSlotHtml(dayIndex, 'lunch', entryMap.get(`${dayIndex}-lunch`))}
-      ${menuSlotHtml(dayIndex, 'dinner', entryMap.get(`${dayIndex}-dinner`))}
+      ${menuSlotHtml(dayIndex, 'lunch', slotEntry(dayIndex, 'lunch'))}
+      ${menuSlotHtml(dayIndex, 'dinner', slotEntry(dayIndex, 'dinner'))}
     `;
     container.appendChild(card);
   });
 
   $$('.meal-slot input', container).forEach(input => {
-    input.addEventListener('input', () => updateSlotActions(input));
-    input.addEventListener('change', () => updateSlotActions(input));
+    const slot = input.closest('.meal-slot');
+    const rememberDraft = () => {
+      (state.menuDrafts[weekIso] ||= {})[`${slot.dataset.day}-${slot.dataset.meal}`] = input.value;
+    };
+    input.addEventListener('input', () => { rememberDraft(); updateSlotActions(input); });
+    input.addEventListener('change', () => { rememberDraft(); updateSlotActions(input); });
     updateSlotActions(input);
   });
 }
@@ -481,10 +493,12 @@ async function saveMenu() {
     };
   }).filter(Boolean);
 
-  state.menu = await apiFetch(`/menus/${toIsoDate(state.weekStart)}`, {
+  const weekIso = toIsoDate(state.weekStart);
+  state.menu = await apiFetch(`/menus/${weekIso}`, {
     method: 'PUT',
     body: JSON.stringify({ entries })
   });
+  delete state.menuDrafts[weekIso];
   await loadDishes();
   renderMenu();
   showToast('Menú semanal guardado.');
