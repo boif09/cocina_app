@@ -1,0 +1,16 @@
+{
+  "name": "Cocina en casa",
+  "short_name": "Cocina",
+  "description": "Recetas, menú semanal y lista de la compra de Judit y Xavi.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f2e9",
+  "theme_color": "#f6f2e9",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

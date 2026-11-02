@@ -739,6 +739,10 @@ $('#new-shopping-list').addEventListener('click', () => createShoppingList().cat
 
 setupSwipeNavigation();
 
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
 async function init() {
   const hashView = { '#recetas': 'recipes', '#menu': 'menu', '#compra': 'shopping' }[location.hash] || 'recipes';
   switchView(hashView);

@@ -34,6 +34,13 @@ Aplicación web para guardar recetas, preparar el menú semanal y gestionar una 
 - Cantidad y unidad opcionales.
 - Posibilidad de quitar los comprados o empezar una nueva lista.
 
+### App instalable (PWA)
+
+- Se puede instalar en el móvil o el ordenador desde el navegador ("Añadir a pantalla de inicio" / "Instalar").
+- `public/manifest.webmanifest`, `public/sw.js` e iconos en `public/icons/` (se regeneran con `node scripts/make-icons.js`).
+- El service worker usa la red primero; sin conexión muestra la última versión guardada. Las escrituras nunca se guardan en caché.
+- Al cambiar los archivos que lista `SHELL` en `sw.js` no hace falta subir la versión de la caché, porque siempre se pide primero a la red.
+
 ## Tecnología
 
 - Node.js 24 o superior.
