@@ -137,6 +137,8 @@ pm2 restart cocina
 
 ## Nginx
 
+> En producción la app vive en el subdominio `https://cocina.jusboif.es` (con `BASE_PATH=/`, sitio `/etc/nginx/sites-available/cocina` y regla en Authelia). Un subdominio propio es necesario para poder instalar la PWA junto a otras apps del mismo dominio. La ruta antigua `/cocina/` redirige al subdominio. El ejemplo de abajo (ruta `/cocina/`) sirve para desarrollo o para un servidor sin subdominio.
+
 Añadir un bloque como este dentro del servidor que ya atiende la IP o el dominio:
 
 ```nginx
