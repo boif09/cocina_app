@@ -200,12 +200,14 @@ h3 { margin-bottom: 6px; font-size: 18px; }
 
 .import-panel {
   display: grid;
-  grid-template-columns: minmax(240px, 520px) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 9px;
   align-items: center;
-  width: min(760px, 100%);
-  margin: -12px 0 28px;
+  margin: 0 0 22px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
 }
+.import-label { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12px; font-weight: 800; }
 .import-panel input {
   min-width: 0;
   padding: 12px 13px;
@@ -281,46 +283,59 @@ h3 { margin-bottom: 6px; font-size: 18px; }
 
 .weekly-menu {
   display: grid;
-  grid-template-columns: repeat(7, minmax(150px, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
-  overflow-x: auto;
   padding: 3px 3px 14px;
 }
 .day-card {
-  min-width: 150px;
-  padding: 15px;
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 18px;
+  align-items: start;
+  padding: 14px 18px;
   background: rgba(255,255,255,.66);
   border: 1px solid var(--line);
   border-radius: 17px;
 }
 .day-card.today { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(221,107,61,.1); }
-.day-heading { margin-bottom: 14px; text-align: center; }
-.day-heading strong { display: block; font-family: Georgia, serif; font-size: 18px; text-transform: capitalize; }
+.day-heading { align-self: center; text-align: left; }
+.day-heading strong { display: block; font-family: Georgia, serif; font-size: 19px; text-transform: capitalize; }
 .day-heading span { color: var(--muted); font-size: 12px; }
-.meal-slot + .meal-slot { margin-top: 13px; }
 .meal-slot label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .meal-slot input {
   width: 100%;
-  min-height: 41px;
-  padding: 9px 10px;
+  min-height: 44px;
+  padding: 10px 12px;
   background: var(--surface-strong);
   border: 1px solid var(--line);
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 15px;
 }
-.slot-actions { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-height: 28px; padding-top: 5px; }
+.slot-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
+.slot-actions:empty { min-height: 0; }
 .slot-link, .slot-create {
-  padding: 3px 0;
+  min-height: 36px;
+  padding: 6px 0;
   border: 0;
   background: none;
   color: var(--green);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 750;
   cursor: pointer;
 }
 .slot-create { color: var(--accent-dark); }
-.slot-status { color: var(--muted); font-size: 10px; }
+.slot-status { color: var(--muted); font-size: 12px; }
 .menu-help { margin-top: 8px; color: var(--muted); font-size: 12px; text-align: center; }
+.menu-save-bar {
+  position: sticky;
+  bottom: 14px;
+  z-index: 15;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  pointer-events: none;
+}
+.menu-save-bar .primary-button { padding: 14px 26px; box-shadow: 0 10px 28px rgba(185, 76, 37, .35); pointer-events: auto; }
 
 .shopping-add-panel {
   padding: 20px;
@@ -339,7 +354,10 @@ h3 { margin-bottom: 6px; font-size: 18px; }
   border-radius: 11px;
 }
 .shopping-summary { display: flex; align-items: center; justify-content: space-between; margin: 20px 4px 12px; color: var(--muted); font-size: 13px; }
-.shopping-tags { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.shopping-section { display: flex; align-items: center; gap: 8px; margin: 22px 4px 10px; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.shopping-section:first-child { margin-top: 4px; }
+.shopping-section span { padding: 1px 8px; color: var(--green); background: var(--green-soft); border-radius: 999px; letter-spacing: 0; }
+.shopping-section-tags { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
 .shopping-tag {
   display: inline-flex;
   align-items: center;
@@ -355,7 +373,8 @@ h3 { margin-bottom: 6px; font-size: 18px; }
   transition: .18s ease;
 }
 .shopping-tag:hover { transform: translateY(-2px); border-color: #c9bda9; }
-.shopping-tag.purchased { opacity: .5; background: var(--green-soft); border-color: #bdd0c1; text-decoration: line-through; }
+.shopping-tag.purchased { opacity: .5; background: var(--green-soft); border-color: #bdd0c1; }
+.shopping-tag.purchased strong, .shopping-tag.purchased .tag-quantity { text-decoration: line-through; }
 .tag-check { display: grid; place-items: center; width: 22px; height: 22px; color: white; background: var(--green); border-radius: 50%; font-size: 12px; }
 .shopping-tag:not(.purchased) .tag-check { color: transparent; background: transparent; border: 1.5px solid #b8b8ae; }
 .tag-quantity { color: var(--muted); font-size: 12px; }
@@ -454,7 +473,7 @@ h3 { margin-bottom: 6px; font-size: 18px; }
   .topbar { align-items: flex-start; flex-direction: column; gap: 13px; }
   .main-nav { width: 100%; overflow-x: auto; }
   .nav-button { flex: 1; justify-content: center; white-space: nowrap; }
-  .weekly-menu { grid-template-columns: repeat(7, minmax(190px, 1fr)); }
+  .day-card { grid-template-columns: 100px minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; }
   .ingredient-row { grid-template-columns: 1fr 80px 90px 38px; }
   .ingredient-row .ingredient-notes { grid-column: 1 / -2; }
 }
@@ -467,9 +486,16 @@ h3 { margin-bottom: 6px; font-size: 18px; }
   .nav-button span { display: none; }
   .hero-row { align-items: stretch; flex-direction: column; gap: 18px; }
   .hero-row .primary-button, .hero-row .secondary-button { width: 100%; }
-  h1 { font-size: 40px; }
+  h1 { font-size: 34px; }
+  .hero-row { gap: 14px; margin-bottom: 20px; }
+  #view-recipes .subtitle { display: none; }
+  .search-panel { margin-bottom: 18px; }
+  .day-card { grid-template-columns: 1fr; gap: 6px; padding: 14px; }
+  .day-heading { display: flex; align-items: baseline; justify-content: space-between; }
+  .menu-save-bar { justify-content: stretch; }
+  .menu-save-bar .primary-button { width: 100%; }
   .recipe-grid { grid-template-columns: 1fr; }
-  .import-panel { grid-template-columns: 1fr; }
+  .import-panel { grid-template-columns: 1fr; margin: 0 0 22px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
   .import-panel button { width: 100%; }
   .shopping-input-row { grid-template-columns: 1fr 1fr; }
   .shopping-input-row input:first-child { grid-column: 1 / -1; }

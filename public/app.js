@@ -230,6 +230,7 @@ function resetRecipeForm(prefillTitle = '') {
 
 async function openRecipeForm(recipe = null, prefillTitle = '') {
   resetRecipeForm(prefillTitle);
+  $('#recipe-import-form').classList.toggle('hidden', Boolean(recipe?.id));
   if (recipe) {
     const isExistingRecipe = Boolean(recipe.id);
     $('#recipe-form-title').textContent = isExistingRecipe ? 'Editar receta' : 'Nueva receta';
@@ -530,8 +531,45 @@ function renderShoppingList() {
   $('#shopping-empty').classList.toggle('hidden', items.length > 0);
   $('#clear-purchased').disabled = !items.some(item => item.is_purchased);
 
-  const tags = $('#shopping-tags');
-  tags.innerHTML = '';
+  const container = $('#shopping-tags');
+  container.innerHTML = '';
+  for (const section of groupShoppingItems(items)) {
+    const heading = document.createElement('h3');
+    heading.className = 'shopping-section';
+    heading.innerHTML = `${escapeHtml(section.title)} <span>${section.items.length}</span>`;
+    const tags = document.createElement('div');
+    tags.className = 'shopping-section-tags';
+    container.append(heading, tags);
+    renderShoppingTags(tags, section.items);
+  }
+}
+
+// Pendientes agrupados por categoría (en el orden del súper) y, al final, los comprados
+const CATEGORY_ORDER = [
+  'Verduras y hortalizas', 'Fruta', 'Carne', 'Pescado y marisco', 'Lácteos y huevos',
+  'Pasta, arroz y legumbres', 'Pan y harinas', 'Despensa', 'Especias y condimentos', 'Congelados'
+];
+
+function groupShoppingItems(items) {
+  const rank = category => {
+    const index = CATEGORY_ORDER.indexOf(category);
+    return index === -1 ? CATEGORY_ORDER.length : index;
+  };
+  const byCategory = new Map();
+  for (const item of items.filter(entry => !entry.is_purchased)) {
+    const category = item.category && CATEGORY_ORDER.includes(item.category) ? item.category : 'Otros';
+    if (!byCategory.has(category)) byCategory.set(category, []);
+    byCategory.get(category).push(item);
+  }
+  const sections = [...byCategory.entries()]
+    .sort((a, b) => rank(a[0]) - rank(b[0]))
+    .map(([title, list]) => ({ title, items: list }));
+  const purchased = items.filter(entry => entry.is_purchased);
+  if (purchased.length) sections.push({ title: 'Comprados', items: purchased });
+  return sections;
+}
+
+function renderShoppingTags(tags, items) {
   for (const item of items) {
     const tag = document.createElement('div');
     tag.className = `shopping-tag${item.is_purchased ? ' purchased' : ''}`;
