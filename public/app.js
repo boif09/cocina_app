@@ -547,22 +547,26 @@ function renderShoppingList() {
 // Pendientes agrupados por categoría (en el orden del súper) y, al final, los comprados
 const CATEGORY_ORDER = [
   'Verduras y hortalizas', 'Fruta', 'Carne', 'Pescado y marisco', 'Lácteos y huevos',
-  'Pasta, arroz y legumbres', 'Pan y harinas', 'Despensa', 'Especias y condimentos', 'Congelados'
+  'Pasta, arroz y legumbres', 'Pan y harinas', 'Despensa', 'Especias y condimentos', 'Congelados',
+  'Platos preparados', 'Bebidas', 'Limpieza e higiene'
 ];
+const LAST_CATEGORY = 'Otros';
 
 function groupShoppingItems(items) {
+  // Categorías conocidas por orden; las demás (nuevas) por orden alfabético; "Otros" al final
   const rank = category => {
+    if (category === LAST_CATEGORY) return Number.MAX_SAFE_INTEGER;
     const index = CATEGORY_ORDER.indexOf(category);
     return index === -1 ? CATEGORY_ORDER.length : index;
   };
   const byCategory = new Map();
   for (const item of items.filter(entry => !entry.is_purchased)) {
-    const category = item.category && CATEGORY_ORDER.includes(item.category) ? item.category : 'Otros';
+    const category = item.category || LAST_CATEGORY;
     if (!byCategory.has(category)) byCategory.set(category, []);
     byCategory.get(category).push(item);
   }
   const sections = [...byCategory.entries()]
-    .sort((a, b) => rank(a[0]) - rank(b[0]))
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0], 'es'))
     .map(([title, list]) => ({ title, items: list }));
   const purchased = items.filter(entry => entry.is_purchased);
   if (purchased.length) sections.push({ title: 'Comprados', items: purchased });

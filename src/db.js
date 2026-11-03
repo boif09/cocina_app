@@ -53,8 +53,11 @@ const BASIC_INGREDIENTS = {
     'Croquetas', 'Espinacas congeladas', 'Guisantes congelados', 'Patatas fritas congeladas',
     'Pizza congelada', 'Verduras congeladas'
   ],
+  'Bebidas': [
+    'Agua', 'Cerveza sin alcohol'
+  ],
   'Otros': [
-    'Agua', 'Café', 'Cerveza sin alcohol', 'Frutos secos', 'Té'
+    'Café', 'Frutos secos', 'Té'
   ]
 };
 
