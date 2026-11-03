@@ -69,10 +69,16 @@ function initializeDatabase() {
     'INSERT OR IGNORE INTO ingredients (name, category) VALUES (?, ?)'
   );
 
+  // El catálogo inicial solo se carga en una base de datos vacía: así los ingredientes
+  // que se fusionan, renombran o eliminan después no reaparecen en cada reinicio.
+  const hasIngredients = db.prepare('SELECT 1 FROM ingredients LIMIT 1').get();
+
   db.exec('BEGIN');
   try {
-    for (const [category, names] of Object.entries(BASIC_INGREDIENTS)) {
-      for (const name of names) insertIngredient.run(name, category);
+    if (!hasIngredients) {
+      for (const [category, names] of Object.entries(BASIC_INGREDIENTS)) {
+        for (const name of names) insertIngredient.run(name, category);
+      }
     }
     db.prepare(`
       INSERT INTO shopping_lists (name, is_active)
