@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { databasePath, rootDir } = require('./config');
+const { findSimilar } = require('../public/ingredient-key');
 
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
@@ -114,6 +115,10 @@ function findOrCreateIngredient(name, category = null) {
 
   const existing = db.prepare('SELECT * FROM ingredients WHERE name = ? COLLATE NOCASE').get(cleanName);
   if (existing) return existing;
+
+  // "Tomates", "tomate" o "Tómate" son el mismo ingrediente: se reutiliza el que ya existe
+  const similar = findSimilar(cleanName, db.prepare('SELECT * FROM ingredients').all());
+  if (similar) return similar;
 
   const result = db.prepare(
     'INSERT INTO ingredients (name, category) VALUES (?, ?)'

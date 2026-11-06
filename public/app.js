@@ -10,6 +10,12 @@ const state = {
   shoppingList: null,
   weekStart: getMonday(new Date()),
   menu: null,
+  shoppingServer: null, // última lista recibida del servidor (sin cambios pendientes)
+  offline: false,
+  managerItems: [],
+  mergeFrom: null,
+  servingsTarget: null,
+  cookMode: false,
   // Texto escrito en el menú y aún sin guardar, por semana: { '2026-10-19': { '0-lunch': 'Pasta' } }
   menuDrafts: {}
 };
@@ -22,15 +28,28 @@ let searchTimer;
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
+// Errores con `status` (código HTTP) y `offline` (true si no hay red, el servidor no responde o la sesión caducó)
 async function apiFetch(path, options = {}) {
-  const response = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
-  });
+  let response;
+  try {
+    response = await fetch(`${API}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      ...options
+    });
+  } catch (_networkError) {
+    const error = new Error('Sin conexión con el servidor.');
+    error.offline = true;
+    throw error;
+  }
 
   if (response.status === 204) return null;
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'No se ha podido completar la operación.');
+  if (!response.ok) {
+    const error = new Error(data.error || 'No se ha podido completar la operación.');
+    error.status = response.status;
+    error.offline = ShoppingOutbox.isRetryable(error);
+    throw error;
+  }
   return data;
 }
 
@@ -68,6 +87,7 @@ function closeModal(modal) {
   target.classList.remove('open');
   target.setAttribute('aria-hidden', 'true');
   if (!$('.modal.open')) document.body.style.overflow = '';
+  if (target.id === 'recipe-detail-modal' && state.cookMode) setCookMode(false);
 }
 
 function switchView(viewName) {
@@ -189,6 +209,15 @@ function addIngredientRow(item = {}) {
     <input class="ingredient-notes" placeholder="Notas (opcional)" value="${escapeHtml(item.notes || '')}">
     <button class="remove-row" type="button" aria-label="Eliminar ingrediente">×</button>
   `;
+  $('.ingredient-name', row).addEventListener('change', event => {
+    // "tomates" -> "Tomate" si ya existe, para no crear duplicados
+    const typed = event.target.value.trim();
+    const similar = typed ? IngredientKey.findSimilar(typed, state.ingredients) : null;
+    if (similar && similar.name.toLocaleLowerCase('es') !== typed.toLocaleLowerCase('es')) {
+      event.target.value = similar.name;
+      showToast(`«${typed}» ya existe como «${similar.name}».`);
+    }
+  });
   $('.remove-row', row).addEventListener('click', () => {
     row.remove();
     if (!$('#recipe-ingredients').children.length) addIngredientRow();
@@ -330,18 +359,89 @@ async function openRecipeDetail(id) {
     totalMinutes ? `<span class="mini-tag">Total: ${totalMinutes} min</span>` : ''
   ].join('');
 
-  $('#detail-ingredients').innerHTML = recipe.ingredients.map(item => {
-    const quantity = [formatNumber(item.quantity), item.unit].filter(Boolean).join(' ');
-    const detail = [quantity, item.notes].filter(Boolean).join(' · ');
-    return `<li><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(detail)}</span></li>`;
-  }).join('') || '<li>No hay ingredientes guardados.</li>';
+  state.servingsTarget = recipe.servings || null;
+  renderDetailIngredients();
 
   $('#detail-steps').innerHTML = recipe.steps
     .map(step => `<li>${escapeHtml(step.instruction)}</li>`)
     .join('') || '<li>No hay pasos guardados.</li>';
 
+  setCookMode(false);
   openModal('recipe-detail-modal');
 }
+
+// RACIONES: las cantidades se recalculan en pantalla (la receta guardada no cambia)
+const MIN_SERVINGS = 1;
+const MAX_SERVINGS = 99;
+
+function recipeServingsChanged() {
+  const recipe = state.activeRecipe;
+  return Boolean(recipe?.servings && state.servingsTarget && state.servingsTarget !== recipe.servings);
+}
+
+function renderDetailIngredients() {
+  const recipe = state.activeRecipe;
+  const factor = recipeServingsChanged() ? state.servingsTarget / recipe.servings : 1;
+
+  const control = $('#detail-servings');
+  control.classList.toggle('hidden', !recipe.servings);
+  $('#servings-value').textContent = state.servingsTarget ?? '';
+  $('#servings-reset').classList.toggle('hidden', !recipeServingsChanged());
+  $('#servings-minus').disabled = (state.servingsTarget ?? 0) <= MIN_SERVINGS;
+  $('#servings-plus').disabled = (state.servingsTarget ?? 0) >= MAX_SERVINGS;
+
+  $('#detail-ingredients').innerHTML = recipe.ingredients.map(item => {
+    const quantityValue = item.quantity === null || item.quantity === undefined ? null : item.quantity * factor;
+    const quantity = [formatNumber(quantityValue), item.unit].filter(Boolean).join(' ');
+    const detail = [quantity, item.notes].filter(Boolean).join(' · ');
+    return `<li><strong>${escapeHtml(item.name)}</strong><span${factor !== 1 && quantityValue !== null ? ' class="scaled"' : ''}>${escapeHtml(detail)}</span></li>`;
+  }).join('') || '<li>No hay ingredientes guardados.</li>';
+}
+
+function changeServings(delta) {
+  if (!state.activeRecipe?.servings) return;
+  const next = Math.min(MAX_SERVINGS, Math.max(MIN_SERVINGS, (state.servingsTarget || state.activeRecipe.servings) + delta));
+  state.servingsTarget = next;
+  renderDetailIngredients();
+}
+
+// MODO COCINA: pasos grandes y pantalla encendida mientras se cocina
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    showToast('Este navegador no puede mantener la pantalla encendida.', 'error');
+    return;
+  }
+  try {
+    const sentinel = await navigator.wakeLock.request('screen');
+    sentinel.addEventListener('release', () => { if (wakeLock === sentinel) wakeLock = null; });
+    wakeLock = sentinel;
+  } catch (_error) {
+    showToast('No se pudo mantener la pantalla encendida.', 'error');
+  }
+}
+
+async function releaseWakeLock() {
+  const sentinel = wakeLock;
+  wakeLock = null;
+  try { await sentinel?.release(); } catch (_error) { /* ya liberado */ }
+}
+
+function setCookMode(on) {
+  state.cookMode = on;
+  $('#recipe-detail-modal').classList.toggle('cook-mode', on);
+  const button = $('#cook-mode-toggle');
+  button.textContent = on ? 'Salir del modo cocina' : 'Modo cocina';
+  button.setAttribute('aria-pressed', String(on));
+  if (!on) $$('#detail-steps li.done').forEach(step => step.classList.remove('done'));
+  return on ? requestWakeLock() : releaseWakeLock();
+}
+
+// Al volver a la pestaña el navegador suelta la pantalla encendida: se vuelve a pedir
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.cookMode && !wakeLock) requestWakeLock();
+});
 
 async function deleteActiveRecipe() {
   if (!state.activeRecipe) return;
@@ -511,15 +611,109 @@ function changeWeek(daysToAdd) {
 }
 
 // LISTA DE LA COMPRA
+let storage = null;
+try { storage = window.localStorage; } catch (_error) { /* almacenamiento bloqueado */ }
+const outbox = ShoppingOutbox.createOutbox({ storage, onChange: () => renderSyncStatus() });
+let syncPromise = null;
+
+const lookupCategory = name => IngredientKey.findSimilar(name, state.ingredients)?.category ?? null;
+
 async function loadIngredients() {
-  state.ingredients = await apiFetch('/ingredients?limit=200');
+  state.ingredients = await apiFetch('/ingredients?limit=1000');
   $('#ingredient-suggestions').innerHTML = state.ingredients
     .map(item => `<option value="${escapeHtml(item.name)}"></option>`).join('');
 }
 
-async function loadShoppingList() {
-  state.shoppingList = await apiFetch('/shopping/active');
+// Pide la lista al servidor; sin conexión usa la última guardada. Devuelve true si había conexión.
+async function fetchShoppingServerList() {
+  try {
+    state.shoppingServer = await apiFetch('/shopping/active');
+    outbox.saveCache(state.shoppingServer);
+    state.offline = false;
+    return true;
+  } catch (error) {
+    if (!error.offline) throw error;
+    state.offline = true;
+    const cached = outbox.loadCache();
+    if (!cached) throw new Error('Sin conexión y todavía no hay una lista guardada en este dispositivo.');
+    state.shoppingServer = cached;
+    return false;
+  }
+}
+
+// Lo que se ve = lista del servidor + cambios aún sin enviar
+function refreshShoppingView() {
+  state.shoppingList = ShoppingOutbox.applyOps(state.shoppingServer, outbox.pending(), lookupCategory);
   renderShoppingList();
+  renderSyncStatus();
+}
+
+async function loadShoppingList() {
+  const online = await fetchShoppingServerList();
+  refreshShoppingView();
+  if (online && outbox.count()) syncShopping();
+}
+
+function sendShoppingOp(op) {
+  const json = body => ({ body: JSON.stringify(body) });
+  let request;
+  if (op.type === 'add') request = apiFetch(`/shopping/${op.listId}/items`, { method: 'POST', ...json({ name: op.name, quantity: op.quantity, unit: op.unit }) });
+  else if (op.type === 'toggle') request = apiFetch(`/shopping/items/${op.itemId}`, { method: 'PATCH', ...json({ is_purchased: op.purchased }) });
+  else if (op.type === 'edit') request = apiFetch(`/shopping/items/${op.itemId}`, { method: 'PATCH', ...json({ quantity: op.quantity, unit: op.unit }) });
+  else if (op.type === 'delete') request = apiFetch(`/shopping/items/${op.itemId}`, { method: 'DELETE' });
+  else if (op.type === 'clear') request = apiFetch(`/shopping/${op.listId}/purchased`, { method: 'DELETE' });
+  else return Promise.resolve(null);
+  // Si el elemento o la lista ya no existen, la operación ya no tiene nada que hacer
+  return request.catch(error => {
+    if (error.status === 404 && op.type !== 'add') return null;
+    throw error;
+  });
+}
+
+// Envía los cambios pendientes y vuelve a pedir la lista. Una sola sincronización a la vez.
+function syncShopping() {
+  if (!syncPromise) {
+    syncPromise = (async () => {
+      renderSyncStatus();
+      const hadAdds = outbox.pending().some(op => op.type === 'add');
+      const result = await outbox.flush(sendShoppingOp);
+      state.offline = result.offline;
+      try { await fetchShoppingServerList(); } catch (_error) { /* se queda lo que hubiera */ }
+      refreshShoppingView();
+      if (hadAdds && !result.offline) loadIngredients().catch(() => {});
+      for (const { op, error } of result.dropped) {
+        showToast(`No se pudo guardar un cambio (${op.name || 'ingrediente'}): ${error.message}`, 'error');
+      }
+    })().finally(() => { syncPromise = null; renderSyncStatus(); });
+  }
+  return syncPromise;
+}
+
+function renderSyncStatus() {
+  const banner = $('#shopping-sync');
+  if (!banner) return;
+  const count = outbox.count();
+  const offline = state.offline || navigator.onLine === false;
+  const syncing = Boolean(syncPromise) && !offline;
+  banner.classList.toggle('hidden', !count && !offline);
+  banner.classList.toggle('offline', offline);
+  const changes = `${count} ${count === 1 ? 'cambio' : 'cambios'}`;
+  let text = '';
+  if (offline) text = count ? `Sin conexión (o sesión caducada) · ${changes} sin enviar. Se enviarán solos al volver; si no, recarga la página para entrar de nuevo.` : 'Sin conexión · mostrando la última lista guardada.';
+  else if (count) text = syncing ? `Sincronizando ${changes}…` : `${changes} sin enviar.`;
+  $('#shopping-sync-text').textContent = text;
+  $('#shopping-sync-retry').classList.toggle('hidden', !count || syncing);
+}
+
+function queueShoppingOp(op) {
+  if (!state.shoppingList) {
+    showToast('Abre la lista de la compra con conexión al menos una vez.', 'error');
+    return;
+  }
+  const saved = outbox.enqueue({ ...op, listId: state.shoppingList.id });
+  refreshShoppingView();
+  syncShopping();
+  if (!saved) showToast('Este dispositivo no puede guardar el cambio: no recargues hasta que se envíe.', 'error');
 }
 
 function renderShoppingList() {
@@ -576,7 +770,7 @@ function groupShoppingItems(items) {
 function renderShoppingTags(tags, items) {
   for (const item of items) {
     const tag = document.createElement('div');
-    tag.className = `shopping-tag${item.is_purchased ? ' purchased' : ''}`;
+    tag.className = `shopping-tag${item.is_purchased ? ' purchased' : ''}${item.pending ? ' pending' : ''}`;
     tag.dataset.itemId = item.id;
     const quantity = [formatNumber(item.quantity), item.unit].filter(Boolean).join(' ');
     tag.innerHTML = `
@@ -605,21 +799,40 @@ function formatNumber(value) {
   return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(number);
 }
 
+const parseQuantity = value => {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+// "¿Quieres decir «Tomate»?" cuando lo escrito se parece a un ingrediente que ya existe
+function updateIngredientHint() {
+  const typed = $('#shopping-ingredient').value.trim();
+  const similar = typed ? IngredientKey.findSimilar(typed, state.ingredients) : null;
+  const differs = similar && similar.name.toLocaleLowerCase('es') !== typed.toLocaleLowerCase('es');
+  $('#shopping-ingredient-hint').classList.toggle('hidden', !differs);
+  if (differs) $('#shopping-ingredient-hint-text').textContent = `¿Quieres decir «${similar.name}»?`;
+}
+
 async function addShoppingItem() {
-  const name = $('#shopping-ingredient').value.trim();
-  if (!name) return showToast('Escribe un ingrediente.', 'error');
-  await apiFetch(`/shopping/${state.shoppingList.id}/items`, {
-    method: 'POST',
-    body: JSON.stringify({
-      name,
-      quantity: $('#shopping-quantity').value || null,
-      unit: $('#shopping-unit').value.trim()
-    })
+  const typed = $('#shopping-ingredient').value.trim();
+  if (!typed) return showToast('Escribe un ingrediente.', 'error');
+  const similar = IngredientKey.findSimilar(typed, state.ingredients);
+  const name = similar ? similar.name : typed;
+  queueShoppingOp({
+    type: 'add',
+    tempId: ShoppingOutbox.newTempId(),
+    name,
+    quantity: parseQuantity($('#shopping-quantity').value),
+    unit: $('#shopping-unit').value.trim()
   });
+  if (similar && name.toLocaleLowerCase('es') !== typed.toLocaleLowerCase('es')) {
+    showToast(`Añadido como «${name}», que ya existía.`);
+  }
   $('#shopping-ingredient').value = '';
   $('#shopping-quantity').value = '';
   $('#shopping-unit').value = '';
-  await Promise.all([loadShoppingList(), loadIngredients()]);
+  updateIngredientHint();
   $('#shopping-ingredient').focus();
 }
 
@@ -677,57 +890,188 @@ function stepShoppingQuantity(delta) {
 
 async function saveShoppingEdit(event) {
   event.preventDefault();
-  const id = $('#shopping-edit-id').value;
-  await apiFetch(`/shopping/items/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      quantity: $('#shopping-edit-quantity').value || null,
-      unit: $('#shopping-edit-unit').value.trim()
-    })
+  queueShoppingOp({
+    type: 'edit',
+    itemId: $('#shopping-edit-id').value,
+    quantity: parseQuantity($('#shopping-edit-quantity').value),
+    unit: $('#shopping-edit-unit').value.trim()
   });
   closeModal('shopping-edit-modal');
-  await loadShoppingList();
 }
 
 async function toggleShoppingItem(item) {
-  await apiFetch(`/shopping/items/${item.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ is_purchased: !item.is_purchased })
-  });
-  await loadShoppingList();
+  queueShoppingOp({ type: 'toggle', itemId: item.id, purchased: !item.is_purchased });
 }
 
 async function deleteShoppingItem(itemId) {
-  await apiFetch(`/shopping/items/${itemId}`, { method: 'DELETE' });
-  await loadShoppingList();
+  queueShoppingOp({ type: 'delete', itemId });
 }
 
 async function clearPurchased() {
   if (!state.shoppingList?.items.some(item => item.is_purchased)) return;
-  await apiFetch(`/shopping/${state.shoppingList.id}/purchased`, { method: 'DELETE' });
-  await loadShoppingList();
+  queueShoppingOp({ type: 'clear' });
   showToast('Ingredientes comprados eliminados.');
+}
+
+// Acciones que necesitan al servidor: primero se envía lo pendiente para mantener el orden
+async function flushBeforeServerAction() {
+  if (!outbox.count()) return;
+  await syncShopping();
+  if (outbox.count()) throw new Error('Hay cambios sin enviar. Inténtalo de nuevo cuando tengas conexión.');
 }
 
 async function createShoppingList() {
   const name = prompt('Nombre de la nueva lista:', 'Lista de la compra');
   if (name === null) return;
-  state.shoppingList = await apiFetch('/shopping/new', {
+  await flushBeforeServerAction();
+  state.shoppingServer = await apiFetch('/shopping/new', {
     method: 'POST',
     body: JSON.stringify({ name })
   });
-  renderShoppingList();
+  outbox.saveCache(state.shoppingServer);
+  refreshShoppingView();
   showToast('Nueva lista creada.');
 }
 
 async function addRecipeToShopping() {
   if (!state.activeRecipe) return;
-  if (!state.shoppingList) await loadShoppingList();
-  state.shoppingList = await apiFetch(
-    `/shopping/${state.shoppingList.id}/from-recipe/${state.activeRecipe.id}`,
-    { method: 'POST' }
+  if (!state.shoppingServer) await loadShoppingList();
+  await flushBeforeServerAction();
+  const servings = recipeServingsChanged() ? state.servingsTarget : undefined;
+  state.shoppingServer = await apiFetch(
+    `/shopping/${state.shoppingServer.id}/from-recipe/${state.activeRecipe.id}`,
+    { method: 'POST', body: JSON.stringify({ servings }) }
   );
-  showToast('Ingredientes añadidos a la lista de la compra.');
+  outbox.saveCache(state.shoppingServer);
+  refreshShoppingView();
+  showToast(servings
+    ? `Ingredientes para ${servings} ${servings === 1 ? 'ración' : 'raciones'} añadidos a la lista de la compra.`
+    : 'Ingredientes añadidos a la lista de la compra.');
+}
+
+// GESTOR DE INGREDIENTES
+const matchesSearch = (name, query) => !query || IngredientKey.ingredientKey(name).includes(query);
+
+function usageText(item) {
+  const parts = [];
+  if (item.recipe_count) parts.push(`${item.recipe_count} ${item.recipe_count === 1 ? 'receta' : 'recetas'}`);
+  if (item.shopping_count) parts.push(`${item.shopping_count} ${item.shopping_count === 1 ? 'lista' : 'listas'}`);
+  return parts.join(' · ') || 'Sin usar';
+}
+
+async function loadManagerItems() {
+  state.managerItems = await apiFetch('/ingredients/manage');
+  const categories = new Set([...CATEGORY_ORDER, LAST_CATEGORY]);
+  state.managerItems.forEach(item => item.category && categories.add(item.category));
+  $('#category-suggestions').innerHTML = [...categories].sort((a, b) => a.localeCompare(b, 'es'))
+    .map(category => `<option value="${escapeHtml(category)}"></option>`).join('');
+  renderManager();
+}
+
+function renderManager() {
+  const query = IngredientKey.ingredientKey($('#ingredient-manager-search').value);
+  const unusedOnly = $('#ingredient-manager-unused').checked;
+  const items = state.managerItems.filter(item =>
+    matchesSearch(item.name, query) && (!unusedOnly || (!item.recipe_count && !item.shopping_count)));
+  $('#ingredient-manager-count').textContent = `${items.length} de ${state.managerItems.length}`;
+
+  const list = $('#ingredient-manager-list');
+  list.innerHTML = '';
+  if (!items.length) {
+    list.innerHTML = '<p class="manager-empty">No hay ingredientes que coincidan.</p>';
+    return;
+  }
+  for (const item of items) {
+    const used = item.recipe_count || item.shopping_count;
+    const row = document.createElement('div');
+    row.className = 'manager-row';
+    row.innerHTML = `
+      <input class="manager-name" value="${escapeHtml(item.name)}" aria-label="Nombre de ${escapeHtml(item.name)}">
+      <input class="manager-category" list="category-suggestions" value="${escapeHtml(item.category || '')}" placeholder="Sin categoría" aria-label="Categoría de ${escapeHtml(item.name)}">
+      <span class="manager-usage">${escapeHtml(usageText(item))}</span>
+      <div class="manager-actions">
+        <button class="text-button manager-merge" type="button">Fusionar</button>
+        <button class="text-button danger-text manager-delete" type="button" ${used ? 'disabled title="Está en uso: fusiónalo con otro"' : ''}>Eliminar</button>
+      </div>
+    `;
+    $('.manager-name', row).addEventListener('change', event => saveIngredientChange(item, { name: event.target.value }, event.target).catch(handleError));
+    $('.manager-category', row).addEventListener('change', event => saveIngredientChange(item, { category: event.target.value }, event.target).catch(handleError));
+    $('.manager-merge', row).addEventListener('click', () => openMergeModal(item));
+    $('.manager-delete', row).addEventListener('click', () => deleteManagedIngredient(item).catch(handleError));
+    list.appendChild(row);
+  }
+}
+
+// Tras tocar ingredientes se actualizan las listas que los muestran (sin avisar si falla, p. ej. sin red)
+function refreshAfterIngredientChange() {
+  loadIngredients().catch(() => {});
+  loadShoppingList().catch(() => {});
+}
+
+async function saveIngredientChange(item, changes, input) {
+  const clean = value => String(value ?? '').trim();
+  const unchanged = 'name' in changes ? clean(changes.name) === item.name : clean(changes.category) === (item.category || '');
+  if (unchanged) return;
+  try {
+    const updated = await apiFetch(`/ingredients/${item.id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+    item.name = updated.name;
+    item.category = updated.category;
+    showToast('Ingrediente actualizado.');
+    refreshAfterIngredientChange();
+  } catch (error) {
+    input.value = 'name' in changes ? item.name : (item.category || '');
+    throw error;
+  }
+}
+
+async function deleteManagedIngredient(item) {
+  if (!confirm(`¿Eliminar el ingrediente «${item.name}»?`)) return;
+  await apiFetch(`/ingredients/${item.id}`, { method: 'DELETE' });
+  state.managerItems = state.managerItems.filter(entry => entry.id !== item.id);
+  renderManager();
+  showToast('Ingrediente eliminado.');
+  refreshAfterIngredientChange();
+}
+
+function openMergeModal(item) {
+  state.mergeFrom = item;
+  $('#merge-title').textContent = `«${item.name}»`;
+  // Se parte de la primera palabra del nombre para encontrar rápido el equivalente (Tomates -> tomate)
+  $('#merge-search').value = IngredientKey.ingredientKey(item.name).split(' ')[0] || '';
+  renderMergeResults();
+  openModal('merge-modal');
+  setTimeout(() => $('#merge-search').focus(), 50);
+}
+
+function renderMergeResults() {
+  const from = state.mergeFrom;
+  const query = IngredientKey.ingredientKey($('#merge-search').value);
+  const results = state.managerItems
+    .filter(item => item.id !== from.id && matchesSearch(item.name, query))
+    .slice(0, 30);
+  const box = $('#merge-results');
+  box.innerHTML = results.length ? '' : '<p class="manager-empty">No hay coincidencias.</p>';
+  for (const item of results) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'merge-option';
+    button.innerHTML = `<strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.category || 'Sin categoría')} · ${escapeHtml(usageText(item))}</span>`;
+    button.addEventListener('click', () => mergeIngredientInto(item).catch(handleError));
+    box.appendChild(button);
+  }
+}
+
+async function mergeIngredientInto(target) {
+  const from = state.mergeFrom;
+  const uses = usageText(from);
+  const detail = uses === 'Sin usar' ? '' : ` (${uses})`;
+  if (!confirm(`Se fusionará «${from.name}»${detail} en «${target.name}». «${from.name}» desaparecerá.\n\n¿Continuar?`)) return;
+  await apiFetch(`/ingredients/${from.id}/merge`, { method: 'POST', body: JSON.stringify({ into: target.id }) });
+  closeModal('merge-modal');
+  state.mergeFrom = null;
+  showToast(`«${from.name}» fusionado en «${target.name}».`);
+  await loadManagerItems();
+  refreshAfterIngredientChange();
 }
 
 // EVENTOS
@@ -755,7 +1099,9 @@ $$('[data-close-modal]').forEach(element => {
 });
 
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && $('.modal.open')) closeModal($('.modal.open'));
+  // Escape cierra la ventana de más arriba (la última abierta)
+  const open = $$('.modal.open').pop();
+  if (event.key === 'Escape' && open) closeModal(open);
 });
 
 $('#previous-week').addEventListener('click', () => changeWeek(-7));
@@ -778,6 +1124,46 @@ $('#shopping-edit-minus').addEventListener('click', () => stepShoppingQuantity(-
 $('#shopping-edit-plus').addEventListener('click', () => stepShoppingQuantity(1));
 $('#clear-purchased').addEventListener('click', () => clearPurchased().catch(handleError));
 $('#new-shopping-list').addEventListener('click', () => createShoppingList().catch(handleError));
+$('#shopping-ingredient').addEventListener('input', updateIngredientHint);
+$('#shopping-ingredient-hint-use').addEventListener('click', () => {
+  const similar = IngredientKey.findSimilar($('#shopping-ingredient').value.trim(), state.ingredients);
+  if (similar) $('#shopping-ingredient').value = similar.name;
+  updateIngredientHint();
+  $('#shopping-ingredient').focus();
+});
+
+// Sincronización de la lista sin conexión: al volver la señal, al volver a la app y cada 20 s si queda algo
+$('#shopping-sync-retry').addEventListener('click', () => syncShopping());
+window.addEventListener('online', () => { state.offline = false; syncShopping(); });
+window.addEventListener('offline', () => { state.offline = true; renderSyncStatus(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && outbox.count()) syncShopping();
+});
+setInterval(() => { if (outbox.count() && !syncPromise) syncShopping(); }, 20000);
+
+// Raciones y modo cocina
+$('#servings-minus').addEventListener('click', () => changeServings(-1));
+$('#servings-plus').addEventListener('click', () => changeServings(1));
+$('#servings-reset').addEventListener('click', () => {
+  state.servingsTarget = state.activeRecipe.servings;
+  renderDetailIngredients();
+});
+$('#cook-mode-toggle').addEventListener('click', () => setCookMode(!state.cookMode));
+$('#detail-steps').addEventListener('click', event => {
+  const step = event.target.closest('li');
+  if (step && state.cookMode) step.classList.toggle('done');
+});
+
+// Gestor de ingredientes
+$('#open-ingredient-manager').addEventListener('click', () => {
+  $('#ingredient-manager-search').value = '';
+  $('#ingredient-manager-unused').checked = false;
+  openModal('ingredients-modal');
+  loadManagerItems().catch(handleError);
+});
+$('#ingredient-manager-search').addEventListener('input', renderManager);
+$('#ingredient-manager-unused').addEventListener('change', renderManager);
+$('#merge-search').addEventListener('input', renderMergeResults);
 
 setupSwipeNavigation();
 
@@ -788,7 +1174,14 @@ if ('serviceWorker' in navigator) {
 async function init() {
   const hashView = { '#recetas': 'recipes', '#menu': 'menu', '#compra': 'shopping' }[location.hash] || 'recipes';
   switchView(hashView);
-  await Promise.all([loadRecipes(), loadDishes(), loadIngredients(), loadShoppingList()]);
+  // Sin conexión alguna carga puede fallar; la lista de la compra siempre intenta usar su copia guardada
+  const results = await Promise.allSettled([loadRecipes(), loadDishes(), loadIngredients(), loadShoppingList()]);
+  const failure = results.find(result => result.status === 'rejected');
+  if (failure) {
+    if (failure.reason?.offline) state.offline = true;
+    renderSyncStatus();
+    if (!failure.reason?.offline) handleError(failure.reason);
+  }
   if (hashView === 'menu') await loadMenu();
 }
 

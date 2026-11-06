@@ -11,6 +11,7 @@ const {
   findOrCreateDish
 } = require('./db');
 const { importRecipeFromUrl } = require('./recipe-importer');
+const ingredientAdmin = require('./ingredient-admin');
 
 const app = express();
 const api = `${basePath}/api`;
@@ -120,7 +121,7 @@ app.get(`${api}/health`, (_req, res) => {
 // Ingredientes
 app.get(`${api}/ingredients`, (req, res) => {
   const query = normalizeName(req.query.q);
-  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 1000);
   const ingredients = query
     ? db.prepare(`
         SELECT * FROM ingredients
@@ -135,6 +136,31 @@ app.get(`${api}/ingredients`, (req, res) => {
 app.post(`${api}/ingredients`, (req, res) => {
   const ingredient = findOrCreateIngredient(req.body.name, req.body.category);
   res.status(201).json(ingredient);
+});
+
+// Gestor de ingredientes: lista con uso, renombrar / recategorizar, fusionar y eliminar
+app.get(`${api}/ingredients/manage`, (_req, res) => {
+  res.json(ingredientAdmin.listForManagement());
+});
+
+app.patch(`${api}/ingredients/:id`, (req, res) => {
+  const id = assertPositiveInteger(req.params.id, 'El ingrediente');
+  res.json(ingredientAdmin.updateIngredient(id, {
+    name: req.body.name,
+    category: req.body.category
+  }));
+});
+
+app.post(`${api}/ingredients/:id/merge`, (req, res) => {
+  const id = assertPositiveInteger(req.params.id, 'El ingrediente');
+  const into = assertPositiveInteger(req.body.into, 'El ingrediente de destino');
+  res.json(ingredientAdmin.mergeIngredients(id, into));
+});
+
+app.delete(`${api}/ingredients/:id`, (req, res) => {
+  const id = assertPositiveInteger(req.params.id, 'El ingrediente');
+  ingredientAdmin.deleteIngredient(id);
+  res.status(204).end();
 });
 
 // Recetas
@@ -496,14 +522,25 @@ app.post(`${api}/shopping/:listId/from-recipe/:recipeId`, (req, res) => {
   if (!db.prepare('SELECT id FROM shopping_lists WHERE id = ?').get(listId)) {
     return res.status(404).json({ error: 'Lista no encontrada.' });
   }
-  if (!db.prepare('SELECT id FROM recipes WHERE id = ?').get(recipeId)) {
+  const recipe = db.prepare('SELECT id, servings FROM recipes WHERE id = ?').get(recipeId);
+  if (!recipe) {
     return res.status(404).json({ error: 'Receta no encontrada.' });
   }
+
+  // Si se pide otro número de raciones, las cantidades se escalan (solo si la receta indica sus raciones)
+  const requested = req.body?.servings;
+  const wantedServings = parseOptionalNumber(requested);
+  if (requested !== undefined && requested !== null && requested !== ''
+    && !(wantedServings > 0 && wantedServings <= 999)) {
+    return res.status(400).json({ error: 'Las raciones no son válidas.' });
+  }
+  const factor = recipe.servings && wantedServings ? wantedServings / recipe.servings : 1;
+  const scale = quantity => (quantity === null || factor === 1 ? quantity : Math.round(quantity * factor * 100) / 100);
 
   const recipeIngredients = db.prepare(`
     SELECT ingredient_id, quantity, unit, notes
     FROM recipe_ingredients WHERE recipe_id = ? ORDER BY sort_order
-  `).all(recipeId);
+  `).all(recipeId).map(item => ({ ...item, quantity: scale(item.quantity) }));
 
   transaction(() => {
     const findExisting = db.prepare(`

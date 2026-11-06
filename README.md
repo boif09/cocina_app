@@ -13,6 +13,8 @@ Aplicación web para guardar recetas, preparar el menú semanal y gestionar una 
 - Los ingredientes nuevos se guardan automáticamente en el catálogo.
 - Cada receta crea o enlaza automáticamente un plato para usarlo en el menú.
 - Botón para añadir todos los ingredientes de una receta a la lista de la compra.
+- **Raciones:** en el detalle de la receta se pueden cambiar las raciones y las cantidades se recalculan (la receta guardada no cambia). Al añadir a la compra se usan las cantidades escaladas.
+- **Modo cocina:** pasos en letra grande, se pueden tachar al tocarlos y la pantalla se mantiene encendida (Wake Lock, si el navegador lo permite).
 
 ### Menú semanal
 
@@ -33,6 +35,13 @@ Aplicación web para guardar recetas, preparar el menú semanal y gestionar una 
 - Un clic marca o desmarca el ingrediente como comprado.
 - Cantidad y unidad opcionales.
 - Posibilidad de quitar los comprados o empezar una nueva lista.
+- Los ingredientes se agrupan por categoría y los comprados van al final.
+- **Funciona sin conexión:** los cambios (añadir, marcar, editar cantidad, quitar) se ven al momento y se guardan en una cola en el móvil (`localStorage`); se envían solos al volver la señal. Crear una lista nueva o añadir una receta necesitan conexión.
+- **Sin duplicados:** "tomates", "Tomate" o "Tómate" son el mismo ingrediente (clave sin tildes ni plurales en `public/ingredient-key.js`). La app avisa con «¿Quieres decir…?» y el servidor reutiliza el que ya existe.
+
+### Gestor de ingredientes
+
+Desde la lista de la compra, enlace «Gestionar ingredientes»: buscar, renombrar, cambiar categoría, **fusionar** duplicados (recetas y listas pasan al ingrediente elegido) y eliminar los que no se usan. API: `GET /ingredients/manage`, `PATCH /ingredients/:id`, `POST /ingredients/:id/merge`, `DELETE /ingredients/:id`.
 
 ### App instalable (PWA)
 
@@ -58,10 +67,16 @@ cocina_app/
 ├── public/
 │   ├── app.js
 │   ├── index.html
+│   ├── ingredient-key.js   # comparación de nombres (servidor y navegador)
+│   ├── outbox.js           # cola de cambios sin conexión
+│   ├── manifest.webmanifest
+│   ├── sw.js
 │   └── styles.css
 ├── src/
 │   ├── config.js
 │   ├── db.js
+│   ├── ingredient-admin.js
+│   ├── recipe-importer.js
 │   └── server.js
 ├── test/
 │   └── smoke-db.js
@@ -107,13 +122,13 @@ BASE_PATH=/cocina
 DATABASE_PATH=./data/cocina.db
 ```
 
-## Prueba de SQLite
+## Pruebas
 
 ```bash
 npm test
 ```
 
-La prueba comprueba la creación de tablas, los ingredientes iniciales, la lista inicial y que ingredientes y platos no se dupliquen por diferencias de mayúsculas.
+Ejecuta la prueba de SQLite, la de claves de ingredientes, la del gestor de ingredientes y la de la cola sin conexión (incluye una prueba aleatoria con cortes y respuestas perdidas). La de SQLite comprueba la creación de tablas, los ingredientes iniciales, la lista inicial y que ingredientes y platos no se dupliquen por diferencias de mayúsculas.
 
 ## Despliegue en el servidor con PM2
 

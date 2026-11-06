@@ -2,10 +2,12 @@
 // - Todo va primero a la red, así nunca se ve una versión vieja tras un despliegue.
 // - Sin red: archivos de la app y últimas lecturas de la API desde la caché.
 // - Escrituras (POST, PUT, PATCH, DELETE) y redirecciones (login de Authelia) nunca se guardan.
-const CACHE = 'cocina-v1';
+const CACHE = 'cocina-v2';
 const SHELL = [
   './',
   'app.js',
+  'ingredient-key.js',
+  'outbox.js',
   'styles.css',
   'manifest.webmanifest',
   'icons/icon-192.png',

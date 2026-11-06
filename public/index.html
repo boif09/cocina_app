@@ -108,8 +108,17 @@
               <input id="shopping-unit" placeholder="Unidad">
               <button id="add-shopping-item" class="primary-button">Añadir</button>
             </div>
+            <p id="shopping-ingredient-hint" class="field-hint hidden">
+              <span id="shopping-ingredient-hint-text"></span>
+              <button id="shopping-ingredient-hint-use" class="text-button" type="button">Usar</button>
+            </p>
           </div>
           <datalist id="ingredient-suggestions"></datalist>
+        </div>
+
+        <div id="shopping-sync" class="sync-banner hidden" role="status">
+          <span id="shopping-sync-text"></span>
+          <button id="shopping-sync-retry" class="text-button" type="button">Reintentar</button>
         </div>
 
         <div class="shopping-summary">
@@ -122,6 +131,10 @@
           <div class="empty-icon">🧺</div>
           <h2>La lista está vacía</h2>
           <p>Busca un ingrediente arriba para añadirlo.</p>
+        </div>
+
+        <div class="manager-link">
+          <button id="open-ingredient-manager" class="text-button" type="button">Gestionar ingredientes</button>
         </div>
       </section>
     </main>
@@ -213,6 +226,17 @@
 
       <div id="detail-meta" class="recipe-meta detail-meta"></div>
 
+      <div class="detail-tools">
+        <div id="detail-servings" class="servings-control hidden">
+          <span class="servings-label">Raciones</span>
+          <button id="servings-minus" type="button" class="stepper-small" aria-label="Menos raciones">−</button>
+          <strong id="servings-value" aria-live="polite">4</strong>
+          <button id="servings-plus" type="button" class="stepper-small" aria-label="Más raciones">＋</button>
+          <button id="servings-reset" type="button" class="text-button hidden">Restablecer</button>
+        </div>
+        <button id="cook-mode-toggle" type="button" class="secondary-button small" aria-pressed="false">Modo cocina</button>
+      </div>
+
       <div class="detail-columns">
         <section>
           <h3>Ingredientes</h3>
@@ -269,8 +293,47 @@
     </section>
   </div>
 
+  <div id="ingredients-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <section class="modal-card modal-large" role="dialog" aria-modal="true" aria-labelledby="ingredients-title">
+      <header class="modal-header">
+        <div>
+          <p class="eyebrow">Mantenimiento</p>
+          <h2 id="ingredients-title">Ingredientes</h2>
+          <p class="subtitle">Renombra, cambia la categoría, fusiona duplicados o elimina los que no uses.</p>
+        </div>
+        <button class="close-button" type="button" data-close-modal aria-label="Cerrar">×</button>
+      </header>
+      <div class="manager-toolbar">
+        <input id="ingredient-manager-search" type="search" placeholder="Buscar ingrediente…" autocomplete="off" aria-label="Buscar ingrediente">
+        <label class="manager-filter"><input id="ingredient-manager-unused" type="checkbox"> Solo sin usar</label>
+        <span id="ingredient-manager-count" class="manager-count"></span>
+      </div>
+      <div id="ingredient-manager-list" class="manager-list"></div>
+      <datalist id="category-suggestions"></datalist>
+    </section>
+  </div>
+
+  <div id="merge-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <section class="modal-card modal-small" role="dialog" aria-modal="true" aria-labelledby="merge-title">
+      <header class="modal-header">
+        <div>
+          <p class="eyebrow">Fusionar</p>
+          <h2 id="merge-title"></h2>
+        </div>
+        <button class="close-button" type="button" data-close-modal aria-label="Cerrar">×</button>
+      </header>
+      <p class="subtitle merge-help">Elige el ingrediente que se queda. Las recetas y listas que usan este pasarán al elegido.</p>
+      <input id="merge-search" type="search" placeholder="Buscar el que se queda…" autocomplete="off" aria-label="Buscar ingrediente de destino">
+      <div id="merge-results" class="merge-results"></div>
+    </section>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="./ingredient-key.js"></script>
+  <script src="./outbox.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
